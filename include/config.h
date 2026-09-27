@@ -24,7 +24,7 @@ constexpr double kLocationLongitude = 23.1688;
 constexpr int kMapZoom    = 7;
 constexpr int kMapZoomMin = 5;   // minimum touch-cycle zoom
 constexpr int kMapZoomMax = 12;  // maximum touch-cycle zoom (overlay tiles top out here)
-constexpr int kDefaultMapStyle = 1;          // 0 = dark, 1 = topo, 2 = OSM
+constexpr int kDefaultMapStyle = 2;          // 0 = dark, 1 = topo, 2 = OSM
 constexpr int kBaseMapContrastPercent = 125; // 100 = unchanged
 constexpr int kBaseMapBrightness = 18;       // -255 to 255, applied after contrast
 constexpr int kRadarOverlayAlphaPercent = 50; // 0 = invisible, 100 = opaque

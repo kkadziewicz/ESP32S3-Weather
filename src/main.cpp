@@ -52,7 +52,7 @@ const char* mapUrls[] = {
 };
 
 const char* mapNames[] = {"DARK", "TOPO", "OSM"};
-const char* layerNames[] = {"RADAR", "CLOUDS", "RAIN"};
+const char* layerNames[] = {"RADAR", "CHMURY", "DESZCZ"};
 const char* owmLayerIds[] = {"", "clouds_new", "precipitation_new"};
 int overlayAlphaPercent[] = {
   cfg::kRadarOverlayAlphaPercent,
@@ -167,9 +167,40 @@ void pollSleepSchedule();
 PNG png;
 int globalX, globalY;
 uint16_t panelColor = 0x0841;
-const char* days[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
-const char* dayShort2[] = {"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"};
-const char* months[] = {"Jan.", "Feb.", "March", "April", "May", "June", "July", "Aug.", "Sept.", "Oct.", "Nov.", "Dec."};
+const char* days[] = {
+  "Niedziela",
+  "Poniedzialek",
+  "Wtorek",
+  "Sroda",
+  "Czwartek",
+  "Piatek",
+  "Sobota"
+};
+
+const char* dayShort2[] = {
+  "Nd",
+  "Pn",
+  "Wt",
+  "Sr",
+  "Cz",
+  "Pt",
+  "So"
+};
+
+const char* months[] = {
+  "sty.",
+  "lut.",
+  "mar.",
+  "kwi.",
+  "maj",
+  "cze.",
+  "lip.",
+  "sie.",
+  "wrz.",
+  "paz.",
+  "lis.",
+  "gru."
+};
 
 struct SpiRamAllocator {
   void* allocate(size_t size) {
@@ -546,28 +577,28 @@ void formatLayerAgeLabel(int targetLayer, char* out, size_t outLen) {
   if (layerCacheMatches(targetLayer)) {
     unsigned long ageSecs = layerCacheAgeSecs(targetLayer);
     if (ageSecs < 60) {
-      strlcpy(out, "fresh", outLen);
+      strlcpy(out, "swieze", outLen);
     } else if (ageSecs < 3600) {
-      snprintf(out, outLen, "%lum old", ageSecs / 60UL);
+      snprintf(out, outLen, "%lum temu", ageSecs / 60UL);
     } else if (ageSecs < 86400) {
       snprintf(out, outLen, "%luh %lum", ageSecs / 3600UL, (ageSecs % 3600UL) / 60UL);
     } else {
-      snprintf(out, outLen, "%lud old", ageSecs / 86400UL);
+      snprintf(out, outLen, "%lud temu", ageSecs / 86400UL);
     }
     return;
   }
 
   if (layerRenderInProgress(targetLayer)) {
-    strlcpy(out, "updating", outLen);
+    strlcpy(out, "aktualizacja", outLen);
     return;
   }
 
   if (renderPending && pendingLayerStyle == targetLayer) {
-    strlcpy(out, "queued", outLen);
+    strlcpy(out, "kolejka", outLen);
     return;
   }
 
-  strlcpy(out, "no cache", outLen);
+  strlcpy(out, "brak cache", outLen);
 }
 
 uint16_t layerAgeColor(int targetLayer) {
@@ -828,86 +859,85 @@ const char kWebUiHtml[] PROGMEM = R"HTML(
     <header>
       <div>
         <h1>ESP32S3 Weather</h1>
-        <p class="sub">Live TFT mirror, cache telemetry, and LAN controls.</p>
+        <p class="sub">Podglad TFT, stan pamieci podrecznej i sterowanie przez LAN.</p>
       </div>
       <div class="pill" id="ipPill">LAN</div>
     </header>
     <div class="mirror-wrap"><img id="mirror" src="/screen.bmp?v=0" width="800" height="480" alt="TFT mirror"></div>
     <div class="meta">
-      <span>Frame <strong id="frame">0</strong></span>
-      <span>Layer <strong id="layer">--</strong></span>
-      <span>Map <strong id="map">--</strong></span>
-      <span>Zoom <strong id="zoom">--</strong></span>
-      <span>Render <strong id="render">--</strong></span>
-      <span class="dim" id="touchResult"></span>
+      <span>Klatka <strong id="frame">0</strong></span>
+      <span>Warstwa <strong id="layer">--</strong></span>
+      <span>Mapa <strong id="map">--</strong></span>
+      <span>Skala <strong id="zoom">--</strong></span>
+      <span>Renderowanie <strong id="render">--</strong></span>
     </div>
     <div class="grid">
       <section class="card">
-        <h2>Layer Cache</h2>
+        <h2>Pamiec warstw</h2>
         <table>
-          <thead><tr><th>Layer</th><th>Status</th><th>Age</th><th>Cached At</th><th>Cache Map</th></tr></thead>
+          <thead><tr><th>Warstwa</th><th>Stan</th><th>Wiek</th><th>Zapisano przy</th><th>Mapa cache</th></tr></thead>
           <tbody id="layers"></tbody>
         </table>
       </section>
       <section class="card">
-        <h2>Controls</h2>
+        <h2>Sterowanie</h2>
         <div class="control">
-          <label for="zoomControl">Zoom</label>
+          <label for="zoomControl">Skala</label>
           <input id="zoomControl" type="range" min="5" max="12" step="1" value="7">
           <output id="zoomOut">7</output>
         </div>
         <div class="control">
-          <label for="radarAlphaControl">Radar opacity</label>
+          <label for="radarAlphaControl">Przezroczystosc radaru</label>
           <input id="radarAlphaControl" type="range" min="0" max="100" step="1" value="50">
           <output id="radarAlphaOut">50%</output>
         </div>
         <div class="control">
-          <label for="cloudAlphaControl">Cloud opacity</label>
+          <label for="cloudAlphaControl">Przezroczystosc chmur</label>
           <input id="cloudAlphaControl" type="range" min="0" max="100" step="1" value="50">
           <output id="cloudAlphaOut">50%</output>
         </div>
         <div class="control">
-          <label for="rainAlphaControl">Rain opacity</label>
+          <label for="rainAlphaControl">Przezroczystosc deszczu</label>
           <input id="rainAlphaControl" type="range" min="0" max="100" step="1" value="50">
           <output id="rainAlphaOut">50%</output>
         </div>
       </section>
       <section class="card">
-        <h2>Hardware</h2>
+        <h2>Sprzet</h2>
         <div class="hw" id="hardware"></div>
         <div class="actions">
-          <button id="rebootBtn" class="danger">Reboot</button>
-          <button id="resetWifiBtn" class="danger">Reset WiFi Settings</button>
+          <button id="rebootBtn" class="danger">Restart</button>
+          <button id="resetWifiBtn" class="danger">Reset ustawien WiFi</button>
         </div>
       </section>
       <section class="card">
-        <h2>Night Schedule</h2>
+        <h2>Tryb nocny</h2>
         <div class="sched-row">
-          <label for="sleepEnabled">Enable schedule</label>
+          <label for="sleepEnabled">Wlacz harmonogram</label>
           <label class="toggle"><input id="sleepEnabled" type="checkbox"><span class="slider"></span></label>
         </div>
         <div class="sched-row">
-          <label for="sleepOnTime">Sleep at</label>
+          <label for="sleepOnTime">Uspij o</label>
           <input id="sleepOnTime" type="time" class="time-input">
         </div>
         <div class="sched-row">
-          <label for="sleepOffTime">Wake at</label>
+          <label for="sleepOffTime">Obudz o</label>
           <input id="sleepOffTime" type="time" class="time-input">
         </div>
         <div class="control">
-          <label for="sleepDimControl">Display Brightness</label>
+          <label for="sleepDimControl">Jasnosc ekranu</label>
           <input id="sleepDimControl" type="range" min="0" max="255" step="1" value="70">
           <output id="sleepDimOut">70</output>
         </div>
         <div id="sleepStatus" class="sched-status"></div>
         <div class="sched-row" style="margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--line)">
-          <label for="sleepForcedEl">Force sleep now</label>
+          <label for="sleepForcedEl">Uspij teraz</label>
           <label class="toggle"><input id="sleepForcedEl" type="checkbox"><span class="slider"></span></label>
         </div>
       </section>
     </div>
     <footer>
-      <span>Based on work by <a href="https://www.hackster.io/mircemk" target="_blank" rel="noopener">Mirko Pavleski</a> &mdash; adapted by Anthony Clarke</span>
+      <span>Na podstawie projektu <a href="https://www.hackster.io/mircemk" target="_blank" rel="noopener">Mirko Pavleski</a> &mdash; adapted by Anthony Clarke</span>
       <div class="footer-social">
         <a href="https://bsky.app/profile/anthonyjclarke.bsky.social" target="_blank" rel="noopener" class="social-link" title="@anthonyjclarke.bsky.social">
           <svg viewBox="0 0 568 501" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M123.121 33.664C188.241 82.553 258.281 181.68 284 234.873c25.719-53.192 95.759-152.32 160.879-201.21C491.866-1.611 568-28.906 568 57.947c0 17.346-9.945 145.713-15.778 166.555-20.275 72.453-94.155 90.933-159.875 79.748C507.222 323.8 536.444 388.56 473.333 453.32c-119.86 122.992-172.272-30.859-185.702-70.281-2.462-7.227-3.614-10.608-3.631-7.733-.017-2.875-1.169.506-3.631 7.733-13.43 39.422-65.842 193.273-185.702 70.281-63.111-64.76-33.889-129.52 80.986-149.07-65.72 11.185-139.6-7.295-159.875-79.748C9.945 203.659 0 75.293 0 57.947 0-28.906 76.134-1.611 123.121 33.664z"/></svg>
@@ -979,22 +1009,30 @@ const char kWebUiHtml[] PROGMEM = R"HTML(
         if (!l.valid) {
           zCell = '--';
         } else if (l.zoom === s.zoom) {
-          zCell = `<span class="fresh">Zoom ${l.zoom}</span>`;
+          zCell = `<span class="fresh">Skala ${l.zoom}</span>`;
         } else {
-          zCell = `<span class="bad">Zoom ${l.zoom}</span><span class="zoom-arrow">&nbsp;&rarr;&nbsp;Zoom ${s.zoom}</span>`;
+          zCell = `<span class="bad">Skala ${l.zoom}</span><span class="zoom-arrow">&nbsp;&rarr;&nbsp;Skala ${s.zoom}</span>`;
         }
-        return `<tr><td>${l.name}</td><td class="${l.status}">${l.status}</td><td>${l.ageLabel} (${l.ageSec}s)</td><td>${zCell}</td><td>${l.valid ? l.map : '--'}</td></tr>`;
+        const statusPL = {
+          updating: 'aktualizacja',
+          queued: 'kolejka',
+          missing: 'brak',
+          mismatch: 'niezgodne',
+          stale: 'nieaktualne',
+          fresh: 'swieze'
+        };
+        return `<tr><td>${l.name}</td><td class="${l.status}">${statusPL[l.status] || l.status}</td><td>${l.ageLabel} (${l.ageSec}s)</td><td>${zCell}</td><td>${l.valid ? l.map : '--'}</td></tr>`;
       }).join('');
-      document.getElementById('hardware').innerHTML = [
-        metric('IP Address', s.hardware.ip),
-        metric('SSID / RSSI', `${s.hardware.ssid || '--'} / ${s.hardware.rssi} dBm`),
-        metric('Heap Free', kb(s.hardware.heapFree)),
-        metric('Largest Heap Block', kb(s.hardware.heapLargest)),
-        metric('Min Heap', kb(s.hardware.heapMin)),
-        metric('PSRAM Free', kb(s.hardware.psramFree)),
-        metric('Largest PSRAM Block', kb(s.hardware.psramLargest)),
-        metric('Flash / CPU', `${kb(s.hardware.flashSize)} / ${s.hardware.cpuMhz} MHz`)
-      ].join('');
+    document.getElementById('hardware').innerHTML = [
+      metric('Adres IP', s.hardware.ip),
+      metric('SSID / RSSI', `${s.hardware.ssid || '--'} / ${s.hardware.rssi} dBm`),
+      metric('Wolny Heap', kb(s.hardware.heapFree)),
+      metric('Najwiekszy blok Heap', kb(s.hardware.heapLargest)),
+      metric('Minimalny Heap', kb(s.hardware.heapMin)),
+      metric('Wolny PSRAM', kb(s.hardware.psramFree)),
+      metric('Najwiekszy blok PSRAM', kb(s.hardware.psramLargest)),
+      metric('Flash / CPU', `${kb(s.hardware.flashSize)} / ${s.hardware.cpuMhz} MHz`)
+    ].join('');
 
       if (s.sleep) {
         const sl = s.sleep;
@@ -1007,12 +1045,17 @@ const char kWebUiHtml[] PROGMEM = R"HTML(
         }
         if (document.activeElement !== sleepForcedEl) sleepForcedEl.checked = sl.forced || false;
         const stateColor = { awake:'var(--accent2)', pending:'var(--warn)', dark:'var(--muted)', woken:'var(--warn)' };
-        const stateLabel = { awake:'awake', pending:'sleeping soon…', dark:'display off', woken:'touch-woken' };
+        const stateLabel = {
+          awake:'aktywny',
+          pending:'za chwile uspienie…',
+          dark:'ekran wygaszony',
+          woken:'wybudzony dotykiem'
+        };
         sleepStatusEl.innerHTML =
-          'State: <span style="color:' + (stateColor[sl.state]||'inherit') + '">' + (stateLabel[sl.state]||sl.state) + '</span>'
-          + (sl.inWindow ? ' &middot; <span style="color:var(--warn)">In window</span>' : '')
-          + (sl.state === 'woken' && sl.wakeRemainSecs > 0 ? ' &middot; Re-sleep in ' + sl.wakeRemainSecs + 's' : '')
-          + '<br>Window: ' + (sl.enabled ? sl.onTime + '–' + sl.offTime : '<em>disabled</em>');
+          'Stan: <span style="color:' + (stateColor[sl.state]||'inherit') + '">' + (stateLabel[sl.state]||sl.state) + '</span>'
+          + (sl.inWindow ? ' &middot; <span style="color:var(--warn)">W przedziale</span>' : '')
+          + (sl.state === 'woken' && sl.wakeRemainSecs > 0 ? ' &middot; Ponowne uspienie za ' + sl.wakeRemainSecs + 's' : '')
+          + '<br>Przedzial: ' + (sl.enabled ? sl.onTime + '–' + sl.offTime : '<em>wylaczony</em>');
       }
     }
 
@@ -1025,7 +1068,7 @@ const char kWebUiHtml[] PROGMEM = R"HTML(
           mirror.src = `/screen.bmp?v=${s.frameVersion}&t=${Date.now()}`;
         }
       } catch (err) {
-        text('render', 'offline');
+        text('render', 'brak polaczenia');
       }
     }
 
@@ -1040,10 +1083,10 @@ const char kWebUiHtml[] PROGMEM = R"HTML(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ x, y })
         });
-        result.textContent = response.ok ? `touch ${x},${y}` : 'touch failed';
+        result.textContent = response.ok ? `touch ${x},${y}` : 'blad dotyku';
         poll();
       } catch (err) {
-        result.textContent = 'touch failed';
+        result.textContent = 'blad dotyku';
       }
     });
 
@@ -1087,15 +1130,15 @@ const char kWebUiHtml[] PROGMEM = R"HTML(
     });
 
     document.getElementById('rebootBtn').addEventListener('click', async () => {
-      if (!confirm('Reboot the ESP32 now?')) return;
+      if (!confirm('Uruchomic ponownie ESP32?')) return;
       await fetch('/api/reboot', { method: 'POST' });
-      text('render', 'rebooting');
+      text('render', 'restart...');
     });
 
     document.getElementById('resetWifiBtn').addEventListener('click', async () => {
-      if (!confirm('Reset saved WiFi settings and reboot?')) return;
+      if (!confirm('Usunac zapisane ustawienia WiFi i uruchomic ponownie?')) return;
       await fetch('/api/reset-wifi', { method: 'POST' });
-      text('render', 'resetting WiFi');
+      text('render', 'reset WiFi...');
     });
 
     sleepEnabledEl.addEventListener('change', () => setConfig({ sleepEnabled: sleepEnabledEl.checked }));
@@ -1723,7 +1766,7 @@ void drawBottomDashboard() {
   lcd.drawRect(0, 480 - sideH, midX, sideH, TFT_DARKGREY);
   int partW = midX / 3;
 
-  const char* lblL[] = {"Morning", "Noon", "Evening"};
+  const char* lblL[] = {"Rano", "Poludnie", "Wieczor"};
   float tmpL[] = {morningTemp, noonTemp, eveningTemp};
   int codL[] = {morningCode, noonCode, eveningCode};
 
@@ -1900,19 +1943,19 @@ void drawGraphPage(int type) {
   lcd.setTextColor(TFT_WHITE);
   lcd.setTextSize(2);
   lcd.setTextDatum(middle_center);
-  lcd.drawString("BACK", 65, 442);
+  lcd.drawString("WROC", 65, 442);
 
   // Units label
 const char* unitTxt = "";
 
-if (type == 1) unitTxt = "Unit: C";
-else if (type == 2) unitTxt = "Unit: hPa";
-else if (type == 3) unitTxt = "Unit: mm";
-else if (type == 4) unitTxt = "Unit: %";
-else if (type == 5) unitTxt = "Unit: %";
-else if (type == 6) unitTxt = "Unit: km/h";
-else if (type == 7) unitTxt = "Unit: index";
-else if (type == 8) unitTxt = "Unit: MJ/m2";
+if (type == 1) unitTxt = "Jedn.: C";
+else if (type == 2) unitTxt = "Jedn.: hPa";
+else if (type == 3) unitTxt = "Jedn.: mm";
+else if (type == 4) unitTxt = "Jedn.: %";
+else if (type == 5) unitTxt = "Jedn.: %";
+else if (type == 6) unitTxt = "Jedn.: km/h";
+else if (type == 7) unitTxt = "Jedn.: indeks";
+else if (type == 8) unitTxt = "Jedn.: MJ/m2";
 
 lcd.setTextDatum(middle_center);
 lcd.setTextSize(3);
@@ -1927,14 +1970,14 @@ lcd.drawString(unitTxt, 370, 448 );
   lcd.setTextSize(2);
   lcd.setTextDatum(top_center);
 
-  if (type == 1) lcd.drawString("16-Day Temperature Forecast", 400, 8);
-  else if (type == 2) lcd.drawString("16-Day Pressure Forecast", 400, 8);
-  else if (type == 3) lcd.drawString("16-Day Rain Forecast", 400, 8);
-  else if (type == 4) lcd.drawString("16-Day Cloud Cover Forecast", 400, 8);
-  else if (type == 5) lcd.drawString("16-Day Humidity Forecast", 400, 8);
-  else if (type == 6) lcd.drawString("16-Day Wind Speed Forecast", 400, 8);
-  else if (type == 7) lcd.drawString("16-Day UV Index Forecast", 400, 8);
-  else if (type == 8) lcd.drawString("16-Day Shortwave Radiation Forecast", 400, 8);
+  if (type == 1) lcd.drawString("Prognoza temperatury - 16 dni", 400, 8);
+else if (type == 2) lcd.drawString("Prognoza cisnienia - 16 dni", 400, 8);
+else if (type == 3) lcd.drawString("Prognoza opadow - 16 dni", 400, 8);
+else if (type == 4) lcd.drawString("Prognoza zachmurzenia - 16 dni", 400, 8);
+else if (type == 5) lcd.drawString("Prognoza wilgotnosci - 16 dni", 400, 8);
+else if (type == 6) lcd.drawString("Prognoza wiatru - 16 dni", 400, 8);
+else if (type == 7) lcd.drawString("Prognoza indeksu UV - 16 dni", 400, 8);
+else if (type == 8) lcd.drawString("Prognoza promieniowania - 16 dni", 400, 8);
 
   // Range setup
   if (type == 1) {
@@ -2447,7 +2490,7 @@ void drawMapBadges() {
   lcd.setTextSize(1);
   lcd.setTextDatum(middle_center);
   char mapLabel[20];
-  snprintf(mapLabel, sizeof(mapLabel), "%s Zoom %d", mapNames[mapStyle], myZoom);
+  snprintf(mapLabel, sizeof(mapLabel), "%s Skala %d", mapNames[mapStyle], myZoom);
   lcd.drawString(mapLabel, mapX + mapW / 2, mapY + mapH / 2);
 
   int layerX = 348, layerY = 4, layerW = 104, layerH = 40;
@@ -2550,29 +2593,29 @@ void drawStartupScreen(bool wifiOk, const char* ssid, const char* ip) {
     lcd.drawString(wBuf, 400, 150);
   } else {
     lcd.setTextColor(TFT_RED);
-    lcd.drawString("WiFi: not connected", 400, 150);
+    lcd.drawString("WiFi: brak polaczenia", 400, 150);
   }
 
   lcd.setTextColor(TFT_LIGHTGREY);
   lcd.drawString(cfg::kNtpTimezone, 400, 190);
 
   char mBuf[64];
-  snprintf(mBuf, sizeof(mBuf), "PSRAM: %uKB free   Heap: %uKB free",
+  snprintf(mBuf, sizeof(mBuf), "PSRAM: %uKB wolne   Heap: %uKB wolne",
            ESP.getFreePsram() / 1024, ESP.getFreeHeap() / 1024);
   lcd.drawString(mBuf, 400, 230);
 
   lcd.setTextColor(strlen(owmApiKey) > 0 ? TFT_GREEN : TFT_DARKGREY);
-  lcd.drawString(strlen(owmApiKey) > 0 ? "OWM: key present" : "OWM: no key  (RADAR only)", 400, 270);
+  lcd.drawString(strlen(owmApiKey) > 0 ? "OWM: klucz aktywny" : "OWM: brak klucza  (tylko RADAR)", 400, 270);
 
   char cBuf[72];
-  snprintf(cBuf, sizeof(cBuf), "Layer cycle: %ds   Realtime: %dmin",
+  snprintf(cBuf, sizeof(cBuf), "Zmiana warstw: %ds   Odswiezanie: %dmin",
            cfg::kLayerCycleSecs, cfg::kRealtimeRefreshSecs / 60);
   lcd.setTextColor(TFT_DARKGREY);
   lcd.drawString(cBuf, 400, 310);
 
   lcd.setTextColor(TFT_CYAN);
   lcd.setTextSize(3);
-  lcd.drawString("Loading map...", 400, 390);
+  lcd.drawString("Ladowanie mapy...", 400, 390);
   markScreenUpdated();
 }
 
@@ -2604,8 +2647,8 @@ void updateLoadingProgress() {
   lcd.setTextColor(TFT_DARKGREY, TFT_BLACK);
   lcd.setTextSize(1);
   char buf[32];
-  if (total > 0) snprintf(buf, sizeof(buf), "%d / %d tiles", done, total);
-  else           snprintf(buf, sizeof(buf), "Fetching tiles...");
+  if (total > 0) snprintf(buf, sizeof(buf), "%d / %d kafelkow", done, total);
+  else           snprintf(buf, sizeof(buf), "Pobieranie kafelkow...");
   lcd.drawString(buf, 400, 448);
   markScreenUpdated();
 }
@@ -2645,15 +2688,15 @@ void updateRenderStatusOverlay(bool force) {
   lcd.setTextDatum(middle_center);
   lcd.setTextColor(TFT_YELLOW);
   lcd.setTextSize(2);
-  lcd.drawString("Loading map", x + w / 2, y + 20);
+  lcd.drawString("Ladowanie mapy", x + w / 2, y + 20);
 
   char status[64];
   if (total > 0) {
-    snprintf(status, sizeof(status), "%s  zoom %d  %d/%d",
+    snprintf(status, sizeof(status), "%s  skala %d  %d/%d",
              layerNames[renderLayerStyle], renderZoom, done, total);
   } else {
-    snprintf(status, sizeof(status), "%s  zoom %d  starting",
-             layerNames[renderLayerStyle], renderZoom);
+    snprintf(status, sizeof(status), "%s  skala %d  start",
+            layerNames[renderLayerStyle], renderZoom);
   }
 
   lcd.setTextColor(TFT_WHITE);
@@ -2904,8 +2947,8 @@ void drawSleepScreen() {
   lcd.setTextColor(lcd.color565(40, 40, 40));
   lcd.setTextSize(2);
   lcd.setTextDatum(middle_center);
-  lcd.drawString("In Sleep mode", cfg::kScreenWidth / 2, cfg::kScreenHeight / 2 - 16);
-  lcd.drawString("touch to wake up", cfg::kScreenWidth / 2, cfg::kScreenHeight / 2 + 16);
+  lcd.drawString("Tryb uspienia", cfg::kScreenWidth / 2, cfg::kScreenHeight / 2 - 16);
+  lcd.drawString("dotknij aby obudzic", cfg::kScreenWidth / 2, cfg::kScreenHeight / 2 + 16);
   markScreenUpdated();
 }
 
@@ -3063,11 +3106,11 @@ void setup() {
 
   // Update startup screen status now that weather is done and map tiles are next.
   lcd.setTextDatum(middle_center);
-  lcd.setTextColor(TFT_BLACK, TFT_BLACK);
+  lcd.fillRect(0, 365, 800, 50, TFT_BLACK);
+  lcd.setTextDatum(middle_center);
+  lcd.setTextColor(TFT_CYAN, TFT_BLACK);
   lcd.setTextSize(3);
-  lcd.drawString("Loading map...", 400, 390);  // erase old text
-  lcd.setTextColor(TFT_CYAN);
-  lcd.drawString("Fetching map tiles...", 400, 390);
+  lcd.drawString("Pobieranie mapy...", 400, 390);
   markScreenUpdated();
 
   BaseType_t renderTaskOk = xTaskCreatePinnedToCore(
