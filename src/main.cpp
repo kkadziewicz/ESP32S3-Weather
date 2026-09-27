@@ -1563,7 +1563,7 @@ void drawSignature() {
   lcd.fillRect(sx, ry, sw, rh, panelColor);
   lcd.drawRect(sx, ry, sw, rh, TFT_WHITE);
   lcd.setTextDatum(middle_center);
-  lcd.drawString("by mircemk & anthonyjclarke", sx + sw / 2, ry + 11);
+  lcd.drawString("Bialystok, Poland", sx + sw / 2, ry + 11);
 
   lcd.fillRect(35, 388, 80, 22, panelColor);
   lcd.drawRect(35, 388, 80, 22, TFT_WHITE);
@@ -2227,6 +2227,7 @@ void renderRadarMap() {
       globalY = (int)round((tileY * kTileSize) - topLeftWorldY);
 
       String mU = String(mapUrls[targetMapStyle]) + String(targetZoom) + "/" + String(wrappedTileX) + "/" + String(tileY) + ".png";
+if (targetMapStyle == 0) mU += "?key=" + String(SECRET_CARTO_API_KEY);
 
       uint8_t* baseBuf = nullptr;
       size_t baseLen = 0;
@@ -2785,7 +2786,7 @@ bool handleUiTouch(int tx, int ty, bool debounce) {
       handled = true;
     }
     // Map style toggle (bottom centre strip)
-    else if (tx > 310 && tx < 490 && ty > 385 && ty < 480) {
+    else if (tx > 680 && tx < 800 && ty > 370 && ty < 430) {
       mapStyle = (mapStyle + 1) % 3;
       invalidateLayerCaches();
       layerCycleLastMs = millis();

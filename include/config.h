@@ -18,9 +18,9 @@ constexpr int kScreenHeight = 480;
 // 4. kDefaultMapStyle selects startup map base: 0 = dark, 1 = topo, 2 = OSM.
 // 5. The base-map contrast/brightness values tune tile visibility on the LCD.
 
-constexpr const char* kLocationName = "Putney, NSW, Australia";
-constexpr double kLocationLatitude  = -33.8261;
-constexpr double kLocationLongitude = 151.1063;
+constexpr const char* kLocationName = "Bialystok, Poland";
+constexpr double kLocationLatitude  = 53.1325;
+constexpr double kLocationLongitude = 23.1688;
 constexpr int kMapZoom    = 7;
 constexpr int kMapZoomMin = 5;   // minimum touch-cycle zoom
 constexpr int kMapZoomMax = 12;  // maximum touch-cycle zoom (overlay tiles top out here)
@@ -33,7 +33,7 @@ constexpr int kRainOverlayAlphaPercent  = 50; // 0 = invisible, 100 = opaque
 
 constexpr const char* kWifiApName  = "ESP32S3-Weather";
 constexpr const char* kOtaHostname = "ESP32S3-Weather";
-constexpr const char* kNtpTimezone = "AEST-10AEDT,M10.1.0,M4.1.0/3";
+constexpr const char* kNtpTimezone = "CET-1CEST,M3.5.0,M10.5.0/3";
 constexpr int         kLayerCycleSecs = 30;
 constexpr int         kRealtimeRefreshSecs = 1800; // weather/map API refresh interval
 constexpr uint32_t    kRenderTaskStackBytes = 32768;
