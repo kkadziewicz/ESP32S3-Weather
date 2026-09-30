@@ -1733,7 +1733,7 @@ void drawProgressTimer() {
 
 void drawBottomDashboard() {
   struct tm timeinfo;
-  bool timeOk = getLocalTime(&timeinfo, 0);
+  bool timeOk = getLocalTime(&timeinfo, 1000);
 
   int midW = 180;
   int midH = 95;
