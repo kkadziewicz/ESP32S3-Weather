@@ -89,6 +89,7 @@ unsigned long layerCycleLastMs = 0;
 unsigned long realtimeRefreshLastMs = 0;
 TaskHandle_t  renderTaskHandle = nullptr;
 int renderLayerStyle = 0;
+int overlayDecodeLayer = 0;
 int renderMapStyle = 0;
 int renderZoom = 0;
 int pendingLayerStyle = 0;
@@ -434,8 +435,8 @@ int pngDrawOverlayCanvas(PNGDRAW *pDraw) {
   uint16_t pix[256];
   png.getLineAsRGB565(pDraw, pix, PNG_RGB565_LITTLE_ENDIAN, 0);
   int alphaPercent = 100;
-  if (renderLayerStyle >= 0 && renderLayerStyle < 3) {
-    alphaPercent = constrain(overlayAlphaPercent[renderLayerStyle], 0, 100);
+  if (overlayDecodeLayer >= 0 && overlayDecodeLayer < 3) {
+    alphaPercent = constrain(overlayAlphaPercent[overlayDecodeLayer], 0, 100);
   }
 
   for (int x = 0; x < pDraw->iWidth; x++) {
@@ -795,7 +796,12 @@ const char kWebUiHtml[] PROGMEM = R"HTML(
     #mirror { width: 100%; height: auto; image-rendering: auto; cursor: crosshair; user-select: none; }
     .meta { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 18px; color: var(--muted); font-size: 13px; }
     .meta span { border: 1px solid var(--line); background: rgba(255,255,255,.045); border-radius: 999px; padding: 7px 10px; }
-    .grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 16px; align-items: start; }
+    .grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
     .card {
       border: 1px solid var(--line);
       border-radius: 12px;
@@ -1004,25 +1010,38 @@ const char kWebUiHtml[] PROGMEM = R"HTML(
           rainAlphaOut.textContent = `${s.overlayAlpha.rain}%`;
         }
       }
-      document.getElementById('layers').innerHTML = s.layers.map(l => {
-        let zCell;
-        if (!l.valid) {
-          zCell = '--';
-        } else if (l.zoom === s.zoom) {
-          zCell = `<span class="fresh">Skala ${l.zoom}</span>`;
-        } else {
-          zCell = `<span class="bad">Skala ${l.zoom}</span><span class="zoom-arrow">&nbsp;&rarr;&nbsp;Skala ${s.zoom}</span>`;
-        }
-        const statusPL = {
-          updating: 'aktualizacja',
-          queued: 'kolejka',
-          missing: 'brak',
-          mismatch: 'niezgodne',
-          stale: 'nieaktualne',
-          fresh: 'swieze'
-        };
-        return `<tr><td>${l.name}</td><td class="${l.status}">${statusPL[l.status] || l.status}</td><td>${l.ageLabel} (${l.ageSec}s)</td><td>${zCell}</td><td>${l.valid ? l.map : '--'}</td></tr>`;
-      }).join('');
+      const combined = s.layers[0];
+
+let zCell = '--';
+
+if (combined && combined.valid) {
+  if (combined.zoom === s.zoom) {
+    zCell = `<span class="fresh">Skala ${combined.zoom}</span>`;
+  } else {
+    zCell = `<span class="bad">Skala ${combined.zoom}</span>`;
+  }
+}
+
+const statusPL = {
+  updating: 'aktualizacja',
+  queued: 'kolejka',
+  missing: 'brak',
+  mismatch: 'niezgodne',
+  stale: 'nieaktualne',
+  fresh: 'swieze'
+};
+
+document.getElementById('layers').innerHTML = `
+  <tr>
+    <td>RADAR + CHMURY + DESZCZ</td>
+    <td class="${combined.status}">
+      ${statusPL[combined.status] || combined.status}
+    </td>
+    <td>${combined.ageLabel} (${combined.ageSec}s)</td>
+    <td>${zCell}</td>
+    <td>${combined.valid ? combined.map : '--'}</td>
+  </tr>
+`;
     document.getElementById('hardware').innerHTML = [
       metric('Adres IP', s.hardware.ip),
       metric('SSID / RSSI', `${s.hardware.ssid || '--'} / ${s.hardware.rssi} dBm`),
@@ -2241,14 +2260,12 @@ void renderRadarMap() {
 #endif
   bool skipOwmOverlay = false;
 
-  if (targetLayer != 0) {
-    if (strlen(owmApiKey) == 0) {
-      DBG_WARN("OpenWeatherMap API key missing — skipping CLOUDS/RAIN overlay");
-      skipOwmOverlay = true;
-    } else if (owmAuthFailed) {
-      DBG_WARN("OpenWeatherMap auth previously failed — skipping CLOUDS/RAIN overlay until reboot");
-      skipOwmOverlay = true;
-    }
+  if (strlen(owmApiKey) == 0) {
+    DBG_WARN("OpenWeatherMap API key missing — skipping CLOUDS/RAIN overlay");
+    skipOwmOverlay = true;
+  } else if (owmAuthFailed) {
+    DBG_WARN("OpenWeatherMap auth previously failed — skipping CLOUDS/RAIN overlay until reboot");
+    skipOwmOverlay = true;
   }
 
   for (int tileX = startTX; tileX <= endTX; tileX++) {
@@ -2303,99 +2320,146 @@ if (targetMapStyle == 0) mU += "?key=" + String(SECRET_CARTO_API_KEY);
         DBG_WARN("Base fetch failed: %s", mU.c_str());
         tilesErr++;
       }
+      // Nakladamy wszystkie dane pogodowe na jedna mape:
+      // CHMURY -> DESZCZ -> RADAR
+      const int overlayOrder[] = {1, 2, 0};
 
-      String layerUrl = "";
+      for (int oi = 0; oi < 3; oi++) {
+        int overlayLayer = overlayOrder[oi];
 
-if (targetLayer == 0) {
-	  if (radarPath.length() > 0) {
-	    layerUrl = radarHost + radarPath + "/256/" +
-	               String(targetZoom) + "/" +
-	               String(wrappedTileX) + "/" +
-	               String(tileY) + "/1/1_1.png";
-	  }
-		} else if (!skipOwmOverlay) {
-	        layerUrl = "https://tile.openweathermap.org/map/" +
-	                   String(owmLayerIds[targetLayer]) + "/" +
-	                   String(targetZoom) + "/" +
-	                   String(wrappedTileX) + "/" +
-	                   String(tileY) +
-	                   ".png?appid=" + String(owmApiKey);
-	      }
-
- if (layerUrl.length() > 0) {
-  uint8_t* overlayBuf = nullptr;
-  size_t overlayLen = 0;
-
-    String safeLayerUrl = redactUrlForLog(layerUrl);
-    setRenderDiagContext("overlay_fetch", tileIndex, wrappedTileX, tileY, layerUrl);
-    DBG_VERBOSE("Tile %d/%d overlay start | layer=%s | heap=%u largest=%u | %s",
-                tileIndex, renderTilesTotal, layerNames[targetLayer],
-                ESP.getFreeHeap(), largestInternalBlock(), safeLayerUrl.c_str());
-
-    int overlayStatus = 0;
-	  if (fetchPngToBuffer(layerUrl, &overlayBuf, &overlayLen, &overlayStatus)) {
-
-    // PNG signature check
-    bool isPng =
-      overlayLen >= 8 &&
-      overlayBuf[0] == 0x89 &&
-      overlayBuf[1] == 0x50 &&
-      overlayBuf[2] == 0x4E &&
-      overlayBuf[3] == 0x47 &&
-      overlayBuf[4] == 0x0D &&
-      overlayBuf[5] == 0x0A &&
-      overlayBuf[6] == 0x1A &&
-      overlayBuf[7] == 0x0A;
-
-    if (!isPng) {
-      DBG_WARN("Overlay is NOT PNG! len=%u", (unsigned)overlayLen);
-#if DEBUG_LEVEL >= 4
-      Serial.print("[VERB]  First 32 bytes HEX: ");
-      for (size_t k = 0; k < 32 && k < overlayLen; k++) {
-        Serial.printf("%02X ", overlayBuf[k]);
-      }
-      Serial.println();
-      Serial.print("[VERB]  First 120 chars TXT: ");
-      for (size_t k = 0; k < 120 && k < overlayLen; k++) {
-        char c = (char)overlayBuf[k];
-        if (c >= 32 && c <= 126) Serial.print(c);
-        else Serial.print('.');
-      }
-      Serial.println();
-#endif
-      free(overlayBuf);
-    } else {
-      setRenderDiagPhase("overlay_decode");
-#if DEBUG_LEVEL >= 4
-      unsigned long decodeStart = millis();
-#endif
-      int rc = png.openRAM(overlayBuf, overlayLen, pngDrawOverlayCanvas);
-      if (rc == PNG_SUCCESS) {
-        int decRc = png.decode(NULL, 0);
-        if (decRc != PNG_SUCCESS) {
-          DBG_WARN("PNG decode failed rc=%d", decRc);
+        // Chmury i deszcz wymagaja OpenWeatherMap
+        if (overlayLayer != 0 && (skipOwmOverlay || owmAuthFailed)) {
+          continue;
         }
-        png.close();
-#if DEBUG_LEVEL >= 4
-        DBG_VERBOSE("Tile %d/%d overlay decoded | bytes=%u | %lums",
-                    tileIndex, renderTilesTotal, (unsigned)overlayLen, millis() - decodeStart);
-#endif
-      } else {
-        DBG_WARN("Overlay PNG open failed rc=%d", rc);
+
+        String layerUrl = "";
+
+        if (overlayLayer == 0) {
+          // Radar RainViewer
+          if (radarPath.length() > 0) {
+            layerUrl = radarHost + radarPath + "/256/" +
+                       String(targetZoom) + "/" +
+                       String(wrappedTileX) + "/" +
+                       String(tileY) + "/1/1_1.png";
+          }
+        } else {
+          // Chmury i deszcz OpenWeatherMap
+          layerUrl = "https://tile.openweathermap.org/map/" +
+                     String(owmLayerIds[overlayLayer]) + "/" +
+                     String(targetZoom) + "/" +
+                     String(wrappedTileX) + "/" +
+                     String(tileY) +
+                     ".png?appid=" + String(owmApiKey);
+        }
+
+        if (layerUrl.length() == 0) {
+          continue;
+        }
+
+        uint8_t* overlayBuf = nullptr;
+        size_t overlayLen = 0;
+        int overlayStatus = 0;
+
+        String safeLayerUrl = redactUrlForLog(layerUrl);
+
+        setRenderDiagContext(
+          "overlay_fetch",
+          tileIndex,
+          wrappedTileX,
+          tileY,
+          layerUrl
+        );
+
+        DBG_VERBOSE(
+          "Tile %d/%d overlay start | layer=%s | heap=%u largest=%u | %s",
+          tileIndex,
+          renderTilesTotal,
+          layerNames[overlayLayer],
+          ESP.getFreeHeap(),
+          largestInternalBlock(),
+          safeLayerUrl.c_str()
+        );
+
+        if (fetchPngToBuffer(
+              layerUrl,
+              &overlayBuf,
+              &overlayLen,
+              &overlayStatus)) {
+
+          bool isPng =
+            overlayLen >= 8 &&
+            overlayBuf[0] == 0x89 &&
+            overlayBuf[1] == 0x50 &&
+            overlayBuf[2] == 0x4E &&
+            overlayBuf[3] == 0x47 &&
+            overlayBuf[4] == 0x0D &&
+            overlayBuf[5] == 0x0A &&
+            overlayBuf[6] == 0x1A &&
+            overlayBuf[7] == 0x0A;
+
+          if (!isPng) {
+            DBG_WARN(
+              "Overlay is NOT PNG | layer=%s len=%u",
+              layerNames[overlayLayer],
+              (unsigned)overlayLen
+            );
+          } else {
+            setRenderDiagPhase("overlay_decode");
+
+            // pngDrawOverlayCanvas() wybierze odpowiednia przezroczystosc
+            overlayDecodeLayer = overlayLayer;
+
+            int rc = png.openRAM(
+              overlayBuf,
+              overlayLen,
+              pngDrawOverlayCanvas
+            );
+
+            if (rc == PNG_SUCCESS) {
+              int decRc = png.decode(NULL, 0);
+
+              if (decRc != PNG_SUCCESS) {
+                DBG_WARN(
+                  "PNG decode failed | layer=%s rc=%d",
+                  layerNames[overlayLayer],
+                  decRc
+                );
+              }
+
+              png.close();
+            } else {
+              DBG_WARN(
+                "Overlay PNG open failed | layer=%s rc=%d",
+                layerNames[overlayLayer],
+                rc
+              );
+            }
+          }
+
+          free(overlayBuf);
+
+        } else {
+          if (overlayStatus == HTTP_CODE_UNAUTHORIZED &&
+              overlayLayer != 0) {
+
+            owmAuthFailed = true;
+
+            DBG_ERROR(
+              "OpenWeatherMap overlay unauthorized (401) — check SECRET_OWM_API_KEY"
+            );
+
+          } else {
+            DBG_WARN(
+              "Overlay fetch failed | layer=%s | %s",
+              layerNames[overlayLayer],
+              safeLayerUrl.c_str()
+            );
+          }
+        }
+
+        // Dajemy FreeRTOS chwile pomiedzy warstwami
+        delay(10);
       }
-      free(overlayBuf);
-    }
-
-  } else {
-    if (overlayStatus == HTTP_CODE_UNAUTHORIZED && targetLayer != 0) {
-      owmAuthFailed = true;
-      DBG_ERROR("OpenWeatherMap overlay unauthorized (401) — check SECRET_OWM_API_KEY");
-    } else {
-      DBG_WARN("Overlay fetch failed: %s", safeLayerUrl.c_str());
-    }
-  }
-}
-
       renderTilesDone += 1;
       renderDiagLastProgressMs = millis();
       DBG_VERBOSE("Tile %d/%d done | ok=%d err=%d | heap=%u largest=%u psram=%u stackHW=%u",
@@ -2493,18 +2557,28 @@ void drawMapBadges() {
   snprintf(mapLabel, sizeof(mapLabel), "%s Skala %d", mapNames[mapStyle], myZoom);
   lcd.drawString(mapLabel, mapX + mapW / 2, mapY + mapH / 2);
 
-  int layerX = 348, layerY = 4, layerW = 104, layerH = 40;
+  int layerX = 345, layerY = 4, layerW = 170, layerH = 40;
   lcd.fillRect(layerX, layerY, layerW, layerH, panelColor);
   lcd.drawRect(layerX, layerY, layerW, layerH, TFT_WHITE);
-  lcd.setTextColor(TFT_WHITE);
+
   lcd.setTextSize(1);
   lcd.setTextDatum(middle_center);
-  lcd.drawString(layerNames[layerStyle], layerX + layerW / 2, layerY + 12);
 
-  char ageLabel[16];
-  formatLayerAgeLabel(layerStyle, ageLabel, sizeof(ageLabel));
-  lcd.setTextColor(layerAgeColor(layerStyle));
-  lcd.drawString(ageLabel, layerX + layerW / 2, layerY + 28);
+  lcd.setTextColor(TFT_CYAN);
+lcd.drawString("RADAR", layerX + 28, layerY + 12);
+
+lcd.setTextColor(TFT_LIGHTGREY);
+lcd.drawString("CHMURY", layerX + 85, layerY + 12);
+
+lcd.setTextColor(TFT_SKYBLUE);
+lcd.drawString("DESZCZ", layerX + 142, layerY + 12);
+
+  char ageCombined[20];
+
+  formatLayerAgeLabel(0, ageCombined, sizeof(ageCombined));
+
+  lcd.setTextColor(layerAgeColor(0));
+  lcd.drawString(ageCombined, layerX + layerW / 2, layerY + 28);
   markScreenUpdated();
 }
 
@@ -2819,17 +2893,8 @@ bool handleUiTouch(int tx, int ty, bool debounce) {
   bool handled = false;
 
   if (appState == 0) {
-    // Layer toggle (top centre strip)
-    if (ty > 0 && ty < 40 && tx > 300 && tx < 500) {
-      layerStyle = (layerStyle + 1) % 3;
-      if (layerStyle != 0 && (owmAuthFailed || strlen(owmApiKey) == 0)) layerStyle = 0;
-      layerCycleLastMs = millis();
-      triggerRenderForLayer(layerStyle, false);
-      drawMapBadges();
-      handled = true;
-    }
     // Map style toggle (bottom centre strip)
-    else if (tx > 680 && tx < 800 && ty > 370 && ty < 430) {
+    if (tx > 680 && tx < 800 && ty > 370 && ty < 430) {
       mapStyle = (mapStyle + 1) % 3;
       invalidateLayerCaches();
       layerCycleLastMs = millis();
@@ -3234,17 +3299,6 @@ void loop() {
     lT = millis();
   }
 
-  // --- Layer auto-cycle ---
-  if (appState == 0 &&
-      millis() - layerCycleLastMs >= (unsigned long)cfg::kLayerCycleSecs * 1000UL) {
-    layerStyle = (layerStyle + 1) % 3;
-    if (layerStyle != 0 && (owmAuthFailed || strlen(owmApiKey) == 0)) layerStyle = 0;
-    layerCycleLastMs = millis();
-    DBG_INFO("Layer auto → %s", layerNames[layerStyle]);
-    triggerRenderForLayer(layerStyle, false);
-    drawMapBadges();
-  }
-
   // --- Touch ---
   if (touch_has_signal() && touch_touched()) {
     if (handleUiTouch(touch_last_x, touch_last_y, true)) {
@@ -3260,7 +3314,7 @@ void loop() {
     DBG_INFO("Realtime refresh due | interval=%ds | scheduling weather+render on Core 1",
              cfg::kRealtimeRefreshSecs);
     weatherRefreshPending = true;
-    triggerRenderForLayer(layerStyle, true);
+    triggerRenderForLayer(0, true);
     drawMapBadges();
   }
 }
