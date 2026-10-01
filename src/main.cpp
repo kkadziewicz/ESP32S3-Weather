@@ -132,6 +132,10 @@ constexpr int kMapCanvasHeight = 415;
 
 float currentTemp, morningTemp, noonTemp, eveningTemp;
 int morningCode, noonCode, eveningCode;
+
+time_t todaySunrise = 0;
+time_t todaySunset  = 0;
+
 float dMax[16], dMin[16], dRain[16], dPress[16], dCloud[16];
 float dHum[16], dWind[16], dUV[16], dSolar[16];
 int dCode[16];
@@ -164,6 +168,7 @@ bool isInSleepWindow();
 void drawSleepScreen();
 void exitSleepRestoreDashboard();
 void pollSleepSchedule();
+bool shouldUseDarkMap();
 
 PNG png;
 int globalX, globalY;
@@ -1878,8 +1883,9 @@ void getWeatherData() {
     "&current=temperature_2m,weather_code"
     "&hourly=temperature_2m,weather_code,pressure_msl,cloud_cover"
     "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,"
-    "relative_humidity_2m_mean,wind_speed_10m_max,uv_index_max,shortwave_radiation_sum"
-    "&timezone=auto&forecast_days=16";
+    "relative_humidity_2m_mean,wind_speed_10m_max,uv_index_max,shortwave_radiation_sum,"
+    "sunrise,sunset"
+    "&timezone=auto&timeformat=unixtime&forecast_days=16";
 
   http.begin(weatherUrl);
 
@@ -1900,6 +1906,8 @@ void getWeatherData() {
       JsonArray dailyMax = doc["daily"]["temperature_2m_max"].as<JsonArray>();
       JsonArray dailyMin = doc["daily"]["temperature_2m_min"].as<JsonArray>();
       JsonArray dailyCode = doc["daily"]["weather_code"].as<JsonArray>();
+      JsonArray dailySunrise = doc["daily"]["sunrise"].as<JsonArray>();
+      JsonArray dailySunset  = doc["daily"]["sunset"].as<JsonArray>();
       JsonArray dailyRain = doc["daily"]["precipitation_sum"].as<JsonArray>();
       JsonArray dailyHum = doc["daily"]["relative_humidity_2m_mean"].as<JsonArray>();
       JsonArray dailyWind = doc["daily"]["wind_speed_10m_max"].as<JsonArray>();
@@ -1919,13 +1927,17 @@ void getWeatherData() {
         dailyHum.size() >= 16 &&
         dailyWind.size() >= 16 &&
         dailyUV.size() >= 16 &&
-        dailySolar.size() >= 16;
+        dailySolar.size() >= 16 &&
+        dailySunrise.size() >= 1 &&
+        dailySunset.size() >= 1;
 
       if (!hasForecast) {
         DBG_WARN("Forecast JSON missing fields | hourlyTemp=%u hourlyPress=%u dailyMax=%u",
                  (unsigned)hourlyTemp.size(), (unsigned)hourlyPress.size(), (unsigned)dailyMax.size());
       } else {
         currentTemp = doc["current"]["temperature_2m"];
+        todaySunrise = (time_t)dailySunrise[0].as<long long>();
+        todaySunset  = (time_t)dailySunset[0].as<long long>();
         morningTemp = hourlyTemp[9];
         morningCode = hourlyCode[9];
         noonTemp = hourlyTemp[14];
@@ -3259,6 +3271,19 @@ void setup() {
   logStartupBanner(wifiOk, ip.c_str());
 }
 
+bool shouldUseDarkMap() {
+  if (todaySunrise == 0 || todaySunset == 0) {
+    return false;
+  }
+
+  time_t now = time(nullptr);
+
+  time_t darkStart = todaySunset + (30 * 60);
+  time_t darkEnd   = todaySunrise - (30 * 60);
+
+  return (now >= darkStart || now < darkEnd);
+}
+
 void loop() {
   static unsigned long lT = 0;
   static unsigned long lastSleepCheckMs = 0;
@@ -3330,12 +3355,22 @@ void loop() {
 
   // --- Per-minute dashboard update ---
   if (appState == 0 && getLocalTime(&ti, 0)) {
-    if (ti.tm_min != lastMinute) {
-      lastMinute = ti.tm_min;
-      drawBottomDashboard();
-      drawSignature();
+  if (ti.tm_min != lastMinute) {
+    lastMinute = ti.tm_min;
+
+    int wantedMapStyle = shouldUseDarkMap() ? 0 : 2;
+
+    if (mapStyle != wantedMapStyle) {
+      mapStyle = wantedMapStyle;
+      invalidateLayerCaches();
+      DBG_INFO("Auto map style -> %s", mapNames[mapStyle]);
+      triggerRenderForLayer(0, true);
     }
+
+    drawBottomDashboard();
+    drawSignature();
   }
+}
 
   // --- Progress timer every 5 s ---
   if (appState == 0 && millis() - lT > 5000) {
