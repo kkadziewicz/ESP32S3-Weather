@@ -452,25 +452,33 @@ int pngDrawOverlayCanvas(PNGDRAW *pDraw) {
     }
 
     uint8_t r = src[x * 4 + 0];
-    uint8_t g = src[x * 4 + 1];
-    uint8_t b = src[x * 4 + 2];
-    uint8_t pngAlpha = src[x * 4 + 3];
+uint8_t g = src[x * 4 + 1];
+uint8_t b = src[x * 4 + 2];
+uint8_t pngAlpha = src[x * 4 + 3];
 
-    if (pngAlpha == 0) continue;
+if (pngAlpha == 0) continue;
 
-    uint16_t c =
-      ((r & 0xF8) << 8) |
-      ((g & 0xFC) << 3) |
-      (b >> 3);
+// Na jasnej mapie OSM przyciemniamy kolor chmur,
+// zachowując oryginalny kształt i kanał alpha z OWM.
+if (overlayDecodeLayer == 1 && renderMapStyle == 2) {
+  r = 105;
+  g = 110;
+  b = 115;
+}
 
-    uint16_t boostedAlpha = pngAlpha;
+uint16_t c =
+  ((r & 0xF8) << 8) |
+  ((g & 0xFC) << 3) |
+  (b >> 3);
+
+    uint16_t effectiveAlpha = pngAlpha;
 
 if (overlayDecodeLayer == 1 && renderMapStyle == 2) {
-  boostedAlpha = min<uint16_t>(255, (uint16_t)pngAlpha + 120);
+  effectiveAlpha = min<uint16_t>(255, ((uint16_t)pngAlpha * 3) / 2);
 }
 
 uint16_t finalAlpha =
-  (boostedAlpha * (uint16_t)alphaPercent) / 100;
+  (effectiveAlpha * (uint16_t)alphaPercent) / 100;
 
     if (finalAlpha < 255) {
       uint16_t base = renderTarget->readPixel(sx, sy);
