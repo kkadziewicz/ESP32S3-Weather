@@ -460,7 +460,12 @@ if (pngAlpha == 0) continue;
 
 // Na jasnej mapie OSM przyciemniamy kolor chmur,
 // zachowując oryginalny kształt i kanał alpha z OWM.
-if (overlayDecodeLayer == 1 && renderMapStyle == 2) {
+if (overlayDecodeLayer == 1 && renderMapStyle == 1) {
+  r = 70;
+  g = 75;
+  b = 80;
+}
+else if (overlayDecodeLayer == 1 && renderMapStyle == 2) {
   r = 105;
   g = 110;
   b = 115;
@@ -473,7 +478,7 @@ uint16_t c =
 
     uint16_t effectiveAlpha = pngAlpha;
 
-if (overlayDecodeLayer == 1 && renderMapStyle == 2) {
+if (overlayDecodeLayer == 1 && renderMapStyle != 0) {
   effectiveAlpha = min<uint16_t>(255, ((uint16_t)pngAlpha * 3) / 2);
 }
 
