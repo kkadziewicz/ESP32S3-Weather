@@ -432,30 +432,54 @@ int pngDrawCanvas(PNGDRAW *pDraw) {
 }
 
 int pngDrawOverlayCanvas(PNGDRAW *pDraw) {
-  uint16_t pix[256];
-  png.getLineAsRGB565(pDraw, pix, PNG_RGB565_LITTLE_ENDIAN, 0);
   int alphaPercent = 100;
+
   if (overlayDecodeLayer >= 0 && overlayDecodeLayer < 3) {
     alphaPercent = constrain(overlayAlphaPercent[overlayDecodeLayer], 0, 100);
   }
 
-  for (int x = 0; x < pDraw->iWidth; x++) {
-    uint16_t c = pix[x];
-    if (c == 0) continue;
+  if (alphaPercent <= 0) return 1;
 
+  uint8_t *src = pDraw->pPixels;
+
+  for (int x = 0; x < pDraw->iWidth; x++) {
     int sx = globalX + x;
     int sy = globalY + pDraw->y;
-    if (sx < 0 || sx >= cfg::kScreenWidth || sy < 0 || sy >= kMapCanvasHeight) continue;
-    if (alphaPercent <= 0) continue;
 
-    if (alphaPercent < 100) {
-      uint8_t alpha = (uint8_t)constrain((alphaPercent * 255) / 100, 0, 255);
+    if (sx < 0 || sx >= cfg::kScreenWidth ||
+        sy < 0 || sy >= kMapCanvasHeight) {
+      continue;
+    }
+
+    uint8_t r = src[x * 4 + 0];
+    uint8_t g = src[x * 4 + 1];
+    uint8_t b = src[x * 4 + 2];
+    uint8_t pngAlpha = src[x * 4 + 3];
+
+    if (pngAlpha == 0) continue;
+
+    uint16_t c =
+      ((r & 0xF8) << 8) |
+      ((g & 0xFC) << 3) |
+      (b >> 3);
+
+    uint16_t boostedAlpha = pngAlpha;
+
+if (overlayDecodeLayer == 1 && renderMapStyle == 2) {
+  boostedAlpha = min<uint16_t>(255, (uint16_t)pngAlpha + 120);
+}
+
+uint16_t finalAlpha =
+  (boostedAlpha * (uint16_t)alphaPercent) / 100;
+
+    if (finalAlpha < 255) {
       uint16_t base = renderTarget->readPixel(sx, sy);
-      c = blendRgb565(c, base, alpha);
+      c = blendRgb565(c, base, finalAlpha);
     }
 
     renderTarget->drawPixel(sx, sy, c);
   }
+
   return 1;
 }
 
@@ -2416,7 +2440,15 @@ if (targetMapStyle == 0) mU += "?key=" + String(SECRET_CARTO_API_KEY);
             );
 
             if (rc == PNG_SUCCESS) {
-              int decRc = png.decode(NULL, 0);
+              DBG_INFO(
+                "Overlay PNG | layer=%s type=%d bpp=%d alpha=%d",
+                layerNames[overlayLayer],
+                png.getPixelType(),
+                png.getBpp(),
+                png.hasAlpha()
+              );
+
+  int decRc = png.decode(NULL, 0);
 
               if (decRc != PNG_SUCCESS) {
                 DBG_WARN(
